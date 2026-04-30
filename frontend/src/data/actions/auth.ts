@@ -9,6 +9,7 @@ import {
   type FormState,
 } from "@/data/validation/auth";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export async function registerUserAction(
   prevState: FormState,
@@ -62,7 +63,7 @@ export async function registerUserAction(
   console.log("User Registered Successfully", responseData);
   console.log("#############");
 
-  const cookieStore = await cookies();
+const cookieStore = await cookies();
 
 cookieStore.set("jwt", responseData.jwt, {
   httpOnly: true,
@@ -70,14 +71,7 @@ cookieStore.set("jwt", responseData.jwt, {
   path: "/",
 });
 
-  return {
-    success: true,
-    message: "User registration successful",
-    strapiErrors: null,
-    zodErrors: null,
-    data: fields,
-  };
-}
+redirect("/dashboard");}
 
 export async function loginUserAction(
   prevState: FormState,
@@ -126,9 +120,8 @@ export async function loginUserAction(
     };
   }
 
-  console.log("#############");
-  console.log("User Logged In Successfully", responseData);
-  console.log("#############");
+console.log("User Logged In Successfully", responseData);
+console.log("#############");
 
 const cookieStore = await cookies();
 
@@ -138,11 +131,13 @@ cookieStore.set("jwt", responseData.jwt, {
   path: "/",
 });
 
-  return {
-    success: true,
-    message: "User login successful",
-    strapiErrors: null,
-    zodErrors: null,
-    data: fields,
-  };
+redirect("/dashboard");
+}
+
+export async function logoutAction() {
+  const cookieStore = await cookies();
+
+  cookieStore.delete("jwt");
+
+  redirect("/signin");
 }

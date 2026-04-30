@@ -1,5 +1,7 @@
 import { loginUserService, registerUserService } from "./auth";
 import { getHomePageData } from "./home-page";
+import { uploadFileService } from "./upload";
+import { getUserMe } from "./user";
 
 export const services = {
   auth: {
@@ -8,5 +10,11 @@ export const services = {
   },
   homePage: {
     getHomePageData,
+  },
+  upload: {
+    uploadFileService,
+  },
+  user: {
+    getUserMe,
   },
 };
