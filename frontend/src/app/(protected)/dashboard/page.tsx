@@ -1,4 +1,5 @@
 import { UploadFileForm } from "@/components/forms/upload-file-form";
+import { SummaryForm } from "@/components/forms/summary-form";
 
 export default function DashboardPage() {
   return (
@@ -7,7 +8,7 @@ export default function DashboardPage() {
       <p className="mt-4 text-muted-foreground">
         Welcome to your protected dashboard.
       </p>
-
+<SummaryForm />
       <UploadFileForm />
     </main>
   );
