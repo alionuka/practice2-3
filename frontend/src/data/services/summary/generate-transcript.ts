@@ -1,14 +1,10 @@
 import type { TranscriptData, TranscriptSegment } from "./types";
 
-type TranscriptSnippet = {
-  text: string;
-  start: number;
-  duration: number;
-};
-
-type FetchedTranscript = {
-  snippets?: TranscriptSnippet[];
-  toRawData?: () => TranscriptSnippet[];
+type RawTranscriptSegment = {
+  text?: string;
+  duration?: number;
+  offset?: number;
+  start?: number;
 };
 
 type YouTubeOEmbedResponse = {
@@ -17,6 +13,10 @@ type YouTubeOEmbedResponse = {
 };
 
 const YOUTUBE_VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
+
+const USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
+  "(KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36";
 
 function validateIdentifier(identifier: string): void {
   if (!identifier || typeof identifier !== "string") {
@@ -50,6 +50,9 @@ async function getVideoMetadata(videoId: string) {
       `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
       {
         cache: "no-store",
+        headers: {
+          "User-Agent": USER_AGENT,
+        },
       }
     );
 
@@ -69,17 +72,17 @@ async function getVideoMetadata(videoId: string) {
 }
 
 function normalizeTranscriptSegments(
-  snippets: TranscriptSnippet[]
+  segments: RawTranscriptSegment[]
 ): TranscriptSegment[] {
-  return snippets
-    .filter((snippet) => snippet.text && snippet.text.trim().length > 0)
-    .map((snippet) => {
-      const start = Number(snippet.start);
-      const duration = Number(snippet.duration);
+  return segments
+    .filter((segment) => segment.text && segment.text.trim().length > 0)
+    .map((segment) => {
+      const start = Number(segment.offset ?? segment.start ?? 0);
+      const duration = Number(segment.duration ?? 0);
       const end = start + duration;
 
       return {
-        text: cleanText(snippet.text),
+        text: cleanText(segment.text ?? ""),
         start,
         end,
         duration,
@@ -88,19 +91,15 @@ function normalizeTranscriptSegments(
 }
 
 async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
-  const { YouTubeTranscriptApi } = await import("youtube-transcript-api-js");
+  const { fetchTranscript } = await import("youtube-transcript-plus");
 
-  const api = new YouTubeTranscriptApi();
+  const videoUrl = `https://www.youtube.com/watch?v=${videoId}`;
 
-  const transcript = (await api.fetch(videoId, [
-    "en",
-    "uk",
-    "ru",
-  ])) as FetchedTranscript;
+  const transcript = (await fetchTranscript(videoUrl, {
+    userAgent: USER_AGENT,
+  })) as RawTranscriptSegment[];
 
-  const snippets = transcript.snippets ?? transcript.toRawData?.() ?? [];
-
-  const segments = normalizeTranscriptSegments(snippets);
+  const segments = normalizeTranscriptSegments(transcript);
 
   if (!segments.length) {
     throw new Error("No transcript available for this video");
