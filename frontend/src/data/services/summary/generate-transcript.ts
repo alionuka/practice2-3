@@ -1,91 +1,142 @@
-import {
-  TranscriptData,
-  TranscriptSegment,
-  YouTubeAPIVideoInfo,
-  YouTubeTranscriptSegment,
-} from "./types";
+import type { TranscriptData, TranscriptSegment } from "./types";
 
-const processTranscriptSegments = (
-  segments: YouTubeTranscriptSegment[]
-): TranscriptSegment[] => {
-  return segments.map((segment) => ({
-    text: segment.snippet.text,
-    start: Number(segment.start_ms),
-    end: Number(segment.end_ms),
-    duration: Number(segment.end_ms) - Number(segment.start_ms),
-  }));
+type TranscriptSnippet = {
+  text: string;
+  start: number;
+  duration: number;
 };
 
-const cleanImageUrl = (url: string): string => url.split("?")[0];
+type FetchedTranscript = {
+  snippets?: TranscriptSnippet[];
+  toRawData?: () => TranscriptSnippet[];
+};
 
-const validateIdentifier = (identifier: string): void => {
+type YouTubeOEmbedResponse = {
+  title?: string;
+  thumbnail_url?: string;
+};
+
+const YOUTUBE_VIDEO_ID_REGEX = /^[a-zA-Z0-9_-]{11}$/;
+
+function validateIdentifier(identifier: string): void {
   if (!identifier || typeof identifier !== "string") {
     throw new Error("Invalid YouTube video identifier");
   }
-};
 
-const extractBasicInfo = (info: YouTubeAPIVideoInfo) => {
-  const { title, id: videoId, thumbnail } = info.basic_info;
-  const thumbnailUrl = thumbnail?.[0]?.url;
+  if (!YOUTUBE_VIDEO_ID_REGEX.test(identifier)) {
+    throw new Error("Invalid YouTube video ID");
+  }
+}
 
-  return {
-    title: title || "Untitled Video",
-    videoId,
-    thumbnailUrl: thumbnailUrl ? cleanImageUrl(thumbnailUrl) : undefined,
+function cleanText(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+async function getVideoMetadata(videoId: string) {
+  const fallback = {
+    title: "YouTube Video",
+    thumbnailUrl: `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
   };
-};
 
-const getTranscriptSegments = async (
-  info: YouTubeAPIVideoInfo
-): Promise<YouTubeTranscriptSegment[]> => {
-  const transcriptData = await info.getTranscript();
+  try {
+    const response = await fetch(
+      `https://www.youtube.com/oembed?url=https://www.youtube.com/watch?v=${videoId}&format=json`,
+      {
+        cache: "no-store",
+      }
+    );
 
-  if (!transcriptData?.transcript?.content?.body?.initial_segments) {
+    if (!response.ok) {
+      return fallback;
+    }
+
+    const data = (await response.json()) as YouTubeOEmbedResponse;
+
+    return {
+      title: data.title || fallback.title,
+      thumbnailUrl: data.thumbnail_url || fallback.thumbnailUrl,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function normalizeTranscriptSegments(
+  snippets: TranscriptSnippet[]
+): TranscriptSegment[] {
+  return snippets
+    .filter((snippet) => snippet.text && snippet.text.trim().length > 0)
+    .map((snippet) => {
+      const start = Number(snippet.start);
+      const duration = Number(snippet.duration);
+      const end = start + duration;
+
+      return {
+        text: cleanText(snippet.text),
+        start,
+        end,
+        duration,
+      };
+    });
+}
+
+async function fetchTranscript(videoId: string): Promise<TranscriptSegment[]> {
+  const { YouTubeTranscriptApi } = await import("youtube-transcript-api-js");
+
+  const api = new YouTubeTranscriptApi();
+
+  const transcript = (await api.fetch(videoId, [
+    "en",
+    "uk",
+    "ru",
+  ])) as FetchedTranscript;
+
+  const snippets = transcript.snippets ?? transcript.toRawData?.() ?? [];
+
+  const segments = normalizeTranscriptSegments(snippets);
+
+  if (!segments.length) {
     throw new Error("No transcript available for this video");
   }
 
-  return transcriptData.transcript.content.body.initial_segments;
-};
+  return segments;
+}
 
 export const generateTranscript = async (
   identifier: string
 ): Promise<TranscriptData> => {
   try {
-    const { Innertube } = await import("youtubei.js");
-
-    const youtube = await Innertube.create({
-      lang: "en",
-      location: "US",
-      retrieve_player: false,
-    });
-
     validateIdentifier(identifier);
 
-    const info = await youtube.getInfo(identifier);
+    const videoId = identifier;
+    const metadata = await getVideoMetadata(videoId);
+    const transcriptWithTimeCodes = await fetchTranscript(videoId);
 
-    if (!info) {
-      throw new Error("No video information found");
-    }
-
-    const { title, videoId, thumbnailUrl } = extractBasicInfo(
-      info as YouTubeAPIVideoInfo
-    );
-
-    const segments = await getTranscriptSegments(info as YouTubeAPIVideoInfo);
-    const transcriptWithTimeCodes = processTranscriptSegments(segments);
-    const fullTranscript = segments
-      .map((segment) => segment.snippet.text)
+    const fullTranscript = transcriptWithTimeCodes
+      .map((segment) => segment.text)
       .join(" ");
 
+    if (!fullTranscript) {
+      throw new Error("No transcript available for this video");
+    }
+
     return {
-      title,
+      title: metadata.title,
       videoId,
-      thumbnailUrl,
+      thumbnailUrl: metadata.thumbnailUrl,
       fullTranscript,
       transcriptWithTimeCodes,
     };
   } catch (error) {
     console.error("Error fetching transcript:", error);
+
     throw new Error(
       error instanceof Error ? error.message : "Failed to fetch transcript"
     );

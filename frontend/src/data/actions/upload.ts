@@ -1,57 +1,117 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { revalidatePath } from "next/cache";
+
 import { services } from "@/data/services";
-import { getStrapiURL } from "@/lib/utils";
 
-export async function uploadFileAction(formData: FormData): Promise<void> {
-  const file = formData.get("file") as File;
+export type UploadFormState = {
+  success: boolean;
+  message: string;
+};
 
-  if (!file || file.size === 0) {
-    console.log("No file selected");
-    return;
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+
+const ACCEPTED_FILE_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+
+export async function uploadFileAction(
+  prevState: UploadFormState,
+  formData: FormData
+): Promise<UploadFormState> {
+  const file = formData.get("file");
+
+  if (!(file instanceof File) || file.size === 0) {
+    return {
+      success: false,
+      message: "Please select an image.",
+    };
+  }
+
+  if (!ACCEPTED_FILE_TYPES.includes(file.type)) {
+    return {
+      success: false,
+      message: "Only JPG, PNG, WEBP or GIF images are allowed.",
+    };
+  }
+
+  if (file.size > MAX_FILE_SIZE) {
+    return {
+      success: false,
+      message: "Image must be smaller than 5 MB.",
+    };
   }
 
   const cookieStore = await cookies();
   const jwt = cookieStore.get("jwt")?.value;
 
   if (!jwt) {
-    console.log("No JWT found");
-    return;
+    return {
+      success: false,
+      message: "You must be signed in to upload an image.",
+    };
   }
+
+  const user = await services.user.getUserMe(jwt);
+
+  if (!user?.id) {
+    return {
+      success: false,
+      message: "Could not load user profile.",
+    };
+  }
+
+  const oldAvatarId = user.avatar?.id;
 
   const uploadResponse = await services.upload.uploadFileService(file, jwt);
 
-  if (uploadResponse?.error) {
-    console.log("Upload error:", uploadResponse.error.message);
-    return;
+  if ("error" in uploadResponse) {
+    return {
+      success: false,
+      message: uploadResponse.error.message,
+    };
   }
 
   const uploadedFile = uploadResponse[0];
 
-  const payload = JSON.parse(
-    Buffer.from(jwt.split(".")[1], "base64").toString()
-  );
-
-  const userId = payload.id;
-
-  const updateResponse = await fetch(`${getStrapiURL()}/api/users/${userId}`, {
-    method: "PUT",
-    headers: {
-      Authorization: `Bearer ${jwt}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      avatar: uploadedFile.id,
-    }),
-  });
-
-  const updateData = await updateResponse.json();
-
-  if (!updateResponse.ok) {
-    console.log("User update error:", updateData);
-    return;
+  if (!uploadedFile?.id) {
+    return {
+      success: false,
+      message: "File uploaded, but Strapi did not return file data.",
+    };
   }
 
-  console.log("User updated with avatar:", updateData);
+  const updateResponse = await services.user.updateUserProfileService(
+    user.id,
+    {
+      avatar: uploadedFile.id,
+    },
+    jwt
+  );
+
+  if ("error" in updateResponse) {
+    return {
+      success: false,
+      message: updateResponse.error.message,
+    };
+  }
+
+  if (oldAvatarId && oldAvatarId !== uploadedFile.id) {
+    await services.upload.deleteFileService(oldAvatarId, jwt).catch(() => {
+      console.log("Could not delete old avatar.");
+    });
+  }
+
+  revalidatePath("/profile");
+  revalidatePath("/dashboard");
+
+  return {
+    success: true,
+    message: "Profile image updated successfully.",
+  };
 }

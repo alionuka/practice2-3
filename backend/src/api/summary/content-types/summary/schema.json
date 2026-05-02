@@ -18,7 +18,7 @@
       "type": "string"
     },
     "content": {
-      "type": "blocks"
+      "type": "richtext"
     },
     "userId": {
       "type": "string"

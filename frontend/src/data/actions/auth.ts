@@ -1,6 +1,9 @@
 "use server";
 
 import { z } from "zod";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
+
 import { services } from "@/data/services";
 import { isAuthError } from "@/data/services/auth";
 import {
@@ -8,8 +11,14 @@ import {
   SignupFormSchema,
   type FormState,
 } from "@/data/validation/auth";
-import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+
+const cookieConfig = {
+  maxAge: 60 * 60 * 24 * 7, // 1 week
+  path: "/",
+  httpOnly: true,
+  sameSite: "lax" as const,
+  secure: process.env.NODE_ENV === "production",
+};
 
 export async function registerUserAction(
   prevState: FormState,
@@ -59,19 +68,12 @@ export async function registerUserAction(
     };
   }
 
-  console.log("#############");
-  console.log("User Registered Successfully", responseData);
-  console.log("#############");
+  const cookieStore = await cookies();
 
-const cookieStore = await cookies();
+  cookieStore.set("jwt", responseData.jwt, cookieConfig);
 
-cookieStore.set("jwt", responseData.jwt, {
-  httpOnly: true,
-  secure: false,
-  path: "/",
-});
-
-redirect("/dashboard");}
+  redirect("/dashboard");
+}
 
 export async function loginUserAction(
   prevState: FormState,
@@ -120,24 +122,25 @@ export async function loginUserAction(
     };
   }
 
-console.log("User Logged In Successfully", responseData);
-console.log("#############");
+  const cookieStore = await cookies();
 
-const cookieStore = await cookies();
+  cookieStore.set("jwt", responseData.jwt, cookieConfig);
 
-cookieStore.set("jwt", responseData.jwt, {
-  httpOnly: true,
-  secure: false,
-  path: "/",
-});
-
-redirect("/dashboard");
+  redirect("/dashboard");
 }
 
 export async function logoutAction() {
   const cookieStore = await cookies();
 
-  cookieStore.delete("jwt");
+  cookieStore.set("jwt", "", {
+    ...cookieConfig,
+    maxAge: 0,
+  });
 
   redirect("/signin");
+}
+
+export async function getAuthTokenAction() {
+  const cookieStore = await cookies();
+  return cookieStore.get("jwt")?.value;
 }

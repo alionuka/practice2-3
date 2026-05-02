@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import { toast } from "sonner";
+
 import { Input } from "@/components/ui/input";
-import { api } from "@/data/api";
 import { extractYouTubeID } from "@/lib/utils";
 import { SubmitButton } from "@/components/custom/submit-button";
 
 type SummaryResult = {
   title?: string;
   videoId?: string;
+  thumbnailUrl?: string;
   summary?: string;
-  fallback?: boolean;
+};
+
+type SummaryApiResponse = {
+  data: SummaryResult | null;
+  error: string | null;
 };
 
 export function SummaryForm() {
@@ -24,45 +29,76 @@ export function SummaryForm() {
     setResult(null);
 
     if (!videoId) {
-      toast.error("Invalid YouTube URL");
+      toast.error("Invalid YouTube URL or video ID.");
       return;
     }
 
-    const response = await api.post<{
-      data: SummaryResult | null;
-      error: string | null;
-    }>("/api/transcript", { videoId });
-    console.log("API RESPONSE:", response);
+    const response = await fetch("/api/transcript", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ videoId }),
+    });
 
-    if (response.error || !response.data) {
-      toast.error(response.error || "Something went wrong");
+    const payload = (await response.json()) as SummaryApiResponse;
+
+    if (!response.ok || payload.error || !payload.data) {
+      toast.error(payload.error || "Something went wrong.");
       return;
     }
 
-    setResult(response.data);
-    toast.success("Summary generated successfully");
+    setResult(payload.data);
+    toast.success("Summary generated and saved successfully.");
   }
 
   return (
-    <div className="space-y-6">
-      <form action={handleSubmit} className="flex gap-2">
-        <Input name="url" placeholder="Paste YouTube URL" className="max-w-md" />
-        <SubmitButton text="Generate" loadingText="Generating..." />
+    <div className="space-y-6 rounded-xl border p-6">
+      <div>
+        <h2 className="text-2xl font-bold">Create Video Summary</h2>
+        <p className="text-muted-foreground">
+          Paste a YouTube URL or video ID. The video must have an available
+          transcript/captions.
+        </p>
+      </div>
+
+      <form action={handleSubmit} className="flex flex-col gap-3 sm:flex-row">
+        <Input
+          name="url"
+          placeholder="YouTube URL or video ID"
+          required
+          className="flex-1"
+        />
+
+        <SubmitButton
+          text="Create Summary"
+          loadingText="Creating..."
+        />
       </form>
 
       {result && (
-        <div className="rounded-md border p-4">
-          <h2 className="text-xl font-bold">
-            {result.title || "Generated Summary"}
-          </h2>
-
-          {result.fallback && (
-            <p className="mt-2 text-sm text-yellow-600">
-              Transcript was not available, so fallback summary was generated.
-            </p>
+        <div className="space-y-4 rounded-xl border bg-muted/30 p-4">
+          {result.thumbnailUrl && (
+            <img
+              src={result.thumbnailUrl}
+              alt={result.title || "Video thumbnail"}
+              className="w-full rounded-lg border object-cover"
+            />
           )}
 
-          <p className="mt-4 whitespace-pre-wrap text-sm">
+          <div>
+            <h3 className="text-xl font-semibold">
+              {result.title || "Generated Summary"}
+            </h3>
+
+            {result.videoId && (
+              <p className="text-sm text-muted-foreground">
+                Video ID: {result.videoId}
+              </p>
+            )}
+          </div>
+
+          <p className="whitespace-pre-line leading-7">
             {result.summary}
           </p>
         </div>
