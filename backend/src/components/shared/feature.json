@@ -8,11 +8,16 @@
     "heading": {
       "type": "string"
     },
-    "description": {
-      "type": "string"
+    "subHeading": {
+      "type": "text"
     },
     "icon": {
-      "type": "string"
+      "type": "enumeration",
+      "enum": [
+        "CLOCK_ICON",
+        "CHECK_ICON",
+        "CLOUD_ICON"
+      ]
     }
   },
   "config": {}

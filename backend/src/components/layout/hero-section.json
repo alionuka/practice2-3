@@ -9,7 +9,7 @@
       "type": "string"
     },
     "subHeading": {
-      "type": "string"
+      "type": "text"
     },
     "image": {
       "type": "media",
@@ -24,7 +24,7 @@
     "link": {
       "type": "component",
       "component": "shared.link",
-      "repeatable": true
+      "repeatable": false
     }
   },
   "config": {}

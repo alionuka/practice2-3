@@ -1,0 +1,20 @@
+{
+  "collectionName": "components_layout_headers",
+  "info": {
+    "displayName": "header"
+  },
+  "options": {},
+  "attributes": {
+    "logoText": {
+      "type": "component",
+      "component": "shared.link",
+      "repeatable": false
+    },
+    "ctaButton": {
+      "type": "component",
+      "component": "shared.link",
+      "repeatable": false
+    }
+  },
+  "config": {}
+}

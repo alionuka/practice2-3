@@ -5,13 +5,13 @@
   },
   "options": {},
   "attributes": {
-    "heading": {
+    "title": {
       "type": "string"
     },
-    "subHeading": {
-      "type": "string"
+    "description": {
+      "type": "text"
     },
-    "feature": {
+    "features": {
       "type": "component",
       "component": "shared.feature",
       "repeatable": true
